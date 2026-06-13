@@ -1,0 +1,61 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Env & secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Browser automation sessions / profiles (contain auth cookies — sensitive)
+backend/.sessions/
+backend/.browser-profiles/
+*.storage_state.json
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*~
+*.bak
+*.tmp
+
+# Databases (local/dev SQLite — never commit data)
+*.sqlite
+*.sqlite3
+*.db
+
+# Celery / Redis runtime artifacts (when run outside Docker)
+celerybeat-schedule*
+celerybeat.pid
+*.pid
+dump.rdb
+appendonlydir/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+.playwright/
+
+# Python build artifacts
+build/
+dist/

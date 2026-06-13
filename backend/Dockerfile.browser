@@ -1,0 +1,15 @@
+# Heavy worker image for Playwright-based collectors (Facebook, X).
+# The official Playwright image ships Chromium + all OS deps preinstalled.
+FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY . .
+RUN pip install --upgrade pip && pip install . && playwright install chromium
+
+CMD ["celery", "-A", "app.tasks.celery_app", "worker", \
+     "--loglevel=info", "-Q", "browser", "--concurrency=1", "--pool=solo"]
