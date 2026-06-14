@@ -77,10 +77,13 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
     PURE scroll/pace brain (driver-free): in-run dedup by external_id, scroll-until-dry
     (max_empty_scrolls), max_posts cap, human jitter via injected sleep/rng, raises
     MonitorBlocked on a login/checkpoint wall. TDD: 10 tests, 100% cov; full unit suite 164.
-2b. monitors/facebook_browser.py (NEXT, Docker/browser only) -- PlaywrightFeedDriver
-    implementing FeedDriver: launch context with decrypted storage_state, goto group,
-    scroll, read DOM nodes -> ScrapedPost dicts, detect block. Selectors verified vs the
-    live feed, not guessed. NOT imported by monitors/__init__ (keeps units playwright-free).
+2b. [DONE 2026-06-14] monitors/facebook_browser.py -- PlaywrightFeedDriver implementing
+    FeedDriver: lazy-start Chromium from decrypted storage_state (load_session), goto group,
+    scroll (mouse.wheel), read DOM via one _EXTRACT_JS block -> ScrapedPost dicts, detect
+    login/checkpoint wall. NOT imported by monitors/__init__ (units stay playwright-free).
+    Imports OK inside worker-browser image (py3.12 / playwright 1.60). CAVEAT: selectors are
+    BEST-EFFORT (could not see the live feed) -- _EXTRACT_JS + is_blocked selectors must be
+    verified against a real group after the first capture+run; all other logic is stable.
 3a. [DONE 2026-06-14] monitors/fb_session.py -- save_session/load_session + session_path
     (canonical <dir>/<account>.session, shared by capture + driver so they never diverge):
     Fernet-encrypted storage_state at rest (encrypt/decrypt injected -> testable without
@@ -93,11 +96,20 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
     only (Playwright absent locally). OPEN: headful browser inside the Linux container needs a
     display on Windows (VNC / host-run / bind-mount) -- decide before `make capture-fb` works.
     Full unit suite now 167 passed.
-4. tasks/jobs.py        register scrape_browser_source (build PlaywrightFeedDriver +
-   FacebookMonitor from Settings -> run_monitor -> one process_post_task per RawPost);
-   flip dispatch_due_sources to actually send_task.
-5. Wire E2E: capture session -> set FB group id on the seeded source -> beat -> scrape ->
-   pipeline -> Telegram. Manual smoke + integration test.
+4. [DONE 2026-06-14] tasks/jobs.py -- scrape_browser_source (build PlaywrightFeedDriver +
+   FacebookMonitor from Settings -> run_monitor -> process_post_task.delay per RawPost; heavy
+   imports deferred so beat/light worker never load playwright); _group_id_from_url +
+   _browser_proxy helpers; dispatch_due_sources now app.send_task for FACEBOOK sources ->
+   "browser" queue, logs+skips reddit/X (not built). worker-browser boots, registers the
+   task, celery ready. Full stack (7 services) up.
+5. E2E (NEEDS USER): (a) run `python -m scripts.capture_fb_session --session-dir backend\.sessions`
+   from repo root with PYTHONPATH=backend -> log in -> backend/.sessions/facebook.session.
+   (b) set a real group URL on the seeded source (replace REPLACE_WITH_GROUP_ID; `make seed`
+   then UPDATE, or edit seed.py). (c) put real ANTHROPIC_API_KEY + TELEGRAM_BOT_TOKEN +
+   TELEGRAM_DEFAULT_CHAT_ID in .env, restart workers. (d) trigger:
+   `docker compose exec worker-browser python -c "from app.tasks.jobs import dispatch_due_sources as d; print(d())"`
+   or wait for beat -> watch worker-browser + worker logs -> Telegram. (e) verify _EXTRACT_JS
+   selectors against the live feed; adjust if the run collects 0 posts.
 Then Phase 4 (Reddit/PRAW), 5 (X scrape), 6 (FastAPI + React dashboard/admin + JWT),
 7 (productionization / RLS).
 
