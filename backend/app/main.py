@@ -1,12 +1,13 @@
 ﻿"""FastAPI application entrypoint.
 
-Phase 0 ships a health endpoint only. Phase 6 mounts the dashboard/admin routers
-(matches, keywords, sources, settings, auth).
+Phase 0 shipped a health endpoint only. Phase 6 mounts the dashboard/admin
+routers; auth is wired first, with matches/keywords/sources to follow.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import auth
 from app.core.config import settings
 from app.core.logging import configure_logging
 
@@ -21,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(auth.router)
 
 
 @app.get("/health", tags=["health"])
