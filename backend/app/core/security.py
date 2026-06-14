@@ -10,7 +10,11 @@ import base64
 import hashlib
 import hmac
 import secrets
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
+
+import jwt
 
 from app.core.config import settings
 
@@ -59,3 +63,47 @@ def encrypt_secret(plaintext: str) -> str:
 
 def decrypt_secret(ciphertext: str) -> str:
     return _fernet().decrypt(ciphertext.encode()).decode()
+
+
+# --- JWT access tokens (dashboard auth) -------------------------------------
+# HS256 over the app secret: single backend, no key distribution, so a symmetric
+# secret is the right trade-off. Claims carry the tenant so every request is
+# scoped without a second DB lookup.
+_JWT_ALGORITHM = "HS256"
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12
+
+
+class TokenError(Exception):
+    """Raised when an access token is missing, malformed, expired, or forged."""
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def create_access_token(
+    *,
+    user_id: int,
+    tenant_id: int,
+    role: str,
+    expires_minutes: int = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    now: Callable[[], datetime] = _utcnow,
+) -> str:
+    """Mint a signed access token. ``now`` is injected so expiry is testable."""
+    issued = now()
+    payload = {
+        "sub": str(user_id),
+        "tenant_id": tenant_id,
+        "role": role,
+        "iat": issued,
+        "exp": issued + timedelta(minutes=expires_minutes),
+    }
+    return jwt.encode(payload, settings.app_secret_key, algorithm=_JWT_ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict:
+    """Verify signature + expiry and return the claims, or raise TokenError."""
+    try:
+        return jwt.decode(token, settings.app_secret_key, algorithms=[_JWT_ALGORITHM])
+    except jwt.PyJWTError as exc:
+        raise TokenError(str(exc)) from exc
