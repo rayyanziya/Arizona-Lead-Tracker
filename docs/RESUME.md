@@ -69,12 +69,23 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
     the ScrapedPost contract the Playwright scraper must emit. TDD: 24 tests, 100% cov; full
     unit suite now 149 passed, ruff clean. Step 2 facebook.py just drives the browser + calls
     to_raw_posts().
-2. monitors/facebook.py Playwright persistent context (saved session), scroll + extract
-   the group feed -> RawPost; anti-ban: jitter/delays/cooldown/proxy/stealth, cap at
-   settings.scrape_max_posts_per_run.
-3. scripts/capture_fb_session.py  assisted login, save ENCRYPTED storage_state (Fernet).
-4. tasks/jobs.py        register scrape_browser_source (facebook monitor -> one
-   process_post_task per RawPost); flip dispatch_due_sources to actually send_task.
+2a. [DONE 2026-06-14] monitors/facebook.py -- FacebookMonitor(Monitor) + FeedDriver Protocol.
+    PURE scroll/pace brain (driver-free): in-run dedup by external_id, scroll-until-dry
+    (max_empty_scrolls), max_posts cap, human jitter via injected sleep/rng, raises
+    MonitorBlocked on a login/checkpoint wall. TDD: 10 tests, 100% cov; full unit suite 164.
+2b. monitors/facebook_browser.py (NEXT, Docker/browser only) -- PlaywrightFeedDriver
+    implementing FeedDriver: launch context with decrypted storage_state, goto group,
+    scroll, read DOM nodes -> ScrapedPost dicts, detect block. Selectors verified vs the
+    live feed, not guessed. NOT imported by monitors/__init__ (keeps units playwright-free).
+3a. [DONE 2026-06-14] monitors/fb_session.py -- save_session/load_session: Fernet-encrypted
+    storage_state at rest (encrypt/decrypt injected -> testable without cryptography). TDD:
+    5 tests, 100% cov. DECISION: encrypted storage_state JSON (matches encrypt_secret), NOT a
+    Playwright persistent-context dir.
+3b. scripts/capture_fb_session.py (Docker/browser only) -- assisted login (handles 2FA),
+    save_session(storage_state) under browser_session_dir.
+4. tasks/jobs.py        register scrape_browser_source (build PlaywrightFeedDriver +
+   FacebookMonitor from Settings -> run_monitor -> one process_post_task per RawPost);
+   flip dispatch_due_sources to actually send_task.
 5. Wire E2E: capture session -> set FB group id on the seeded source -> beat -> scrape ->
    pipeline -> Telegram. Manual smoke + integration test.
 Then Phase 4 (Reddit/PRAW), 5 (X scrape), 6 (FastAPI + React dashboard/admin + JWT),
