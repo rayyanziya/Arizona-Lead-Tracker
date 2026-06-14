@@ -29,7 +29,9 @@ Snapshot after **Phase 2 COMPLETE** (shared pipeline primitives). Resume here.
     unit-tested (no celery locally); py_compile + ruff clean; coverage-omitted.
 - Tests GREEN: 110 unit tests. Coverage 93% (tested logic 96-100%; database.py and
   logging.py are integration-only, 0% locally). ruff clean tree-wide.
-- HEAD on master at 20f528e (P2 celery glue). RED/GREEN checkpoint chain intact.
+- Git history squashed to a single clean "Initial commit" (db5adc0 on `main`; Claude
+  attribution removed); the per-phase RED/GREEN commit chain from earlier snapshots no longer
+  exists. User owns all add/commit/push. Phase 3 base.py work is uncommitted in the tree.
 
 ## Run tests / lint / coverage
   & .\.venv\Scripts\python.exe -m pytest backend\tests\unit -q          # 110 passed
@@ -57,7 +59,16 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
 0. INTEGRATION GATE: docker compose up; `alembic upgrade head` against real Postgres
    (schema unchanged since Phase 1; e8afdf049539 still complete). Confirm celery_app +
    jobs import under real deps and a worker boots.
-1. monitors/base.py     Monitor ABC; yields RawPost; writes ScrapeRun telemetry.
+1. [DONE 2026-06-14] monitors/base.py -- Monitor ABC (declares `platform`, `collect()` yields
+   RawPost) + run_monitor telemetry (ScrapeRun RUNNING->SUCCESS/BLOCKED/ERROR, post count,
+   max_posts cap, swallows collector errors). TDD: 15 unit tests, base.py 98% cov; full unit
+   suite 125 passed, ruff clean. Driver-free (SQLite, no Playwright).
+1b. [DONE 2026-06-14] monitors/facebook_parser.py -- PURE scraped-dict -> RawPost transform
+    (canonical FB url + query/fragment strip; unix/ISO/naive ts -> tz-aware UTC; drop elements
+    with no external_id or derivable url; faithful conversion, filtering downstream). Defines
+    the ScrapedPost contract the Playwright scraper must emit. TDD: 24 tests, 100% cov; full
+    unit suite now 149 passed, ruff clean. Step 2 facebook.py just drives the browser + calls
+    to_raw_posts().
 2. monitors/facebook.py Playwright persistent context (saved session), scroll + extract
    the group feed -> RawPost; anti-ban: jitter/delays/cooldown/proxy/stealth, cap at
    settings.scrape_max_posts_per_run.
