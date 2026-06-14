@@ -140,8 +140,40 @@ rate-limits us).
   `docker compose exec worker python -c "from app.tasks.jobs import dispatch_due_sources as d; print(d())"`
   or wait for beat -> watch `worker` + pipeline logs -> Telegram. No login/session needed.
 
-Then Phase 5 (X scrape), 6 (FastAPI + React dashboard/admin + JWT),
-7 (productionization / RLS).
+## Phase 6 -- Dashboard API + auth (BACKEND COMPLETE 2026-06-14, TDD)
+Phase 5 (X) was DEFERRED by user choice; built the dashboard first so the app is
+usable. All endpoints tenant-scoped via get_current_user; tenant isolation is
+explicitly tested (no cross-tenant read/write). Built in 4 chunks:
+- chunk 1: core/security.py JWT primitives -- create_access_token /
+  decode_access_token (HS256 over app_secret_key; sub/tenant_id/role claims;
+  injectable clock; TokenError). 7 unit tests (tests/unit/test_jwt.py).
+- chunk 2: auth API. api/deps.py get_current_user (HTTPBearer -> decode -> load user
+  by (sub, tenant_id), uniform 401). api/auth.py POST /auth/login (active user +
+  active tenant -> JWT), GET /auth/me. schemas/auth.py. REFACTOR: core/database.py
+  engines now lazy+cached (get_async_sessionmaker/get_sync_sessionmaker) so importing
+  app.main needs NO db driver -> API tests run on aiosqlite; get_db/session_scope
+  behavior unchanged (verified in-container vs real Postgres).
+- chunk 3: api/leads.py GET /leads (filter status/platform/min_score, limit/offset,
+  {items,total,limit,offset}; post selectinload'd) + PATCH /leads/{id} (status;
+  422 on bad). schemas/lead.py.
+- chunk 4: api/keywords.py + api/sources.py full CRUD (GET/POST/PATCH/DELETE);
+  duplicate -> 409 (IntegrityError), unknown enum -> 422, cross-tenant -> 404.
+  schemas/admin.py.
+- main.py mounts auth/leads/keywords/sources routers. ruff flake8-bugbear
+  extend-immutable-calls = fastapi.Depends/Security/Query (B008 is a FastAPI idiom).
+- Tests: new tests/api/ harness (httpx ASGITransport + in-memory aiosqlite StaticPool,
+  get_db overridden; auth/seed_user/make_lead fixtures). Run the WHOLE tree now:
+  `& .\.venv\Scripts\python.exe -m pytest backend\tests -q`  -> 225 passed (was unit-only).
+  unit=tests/unit, api=tests/api.
+- LOCAL VENV now also has (pure-python, installed this session so the fast loop runs
+  the API tests): pyjwt, fastapi, starlette, aiosqlite, email-validator,
+  python-multipart. httpx + pytest-asyncio were already present. asyncpg/psycopg
+  still Docker-only (C builds) -- the lazy-engine refactor is what lets app.main
+  import without them.
+- REMAINING: chunk 5 = React dashboard (frontend/ -- does not exist yet; login +
+  leads table + keyword/source admin; user runs it to see it). Then Phase 5 (X), 7.
+
+Then Phase 5 (X scrape, deferred), 7 (productionization / RLS).
 
 ## Locked decisions
 Claude=haiku-4-5 | MVP=single seeded tenant (auth UI deferred to P6) | sessions encrypted
