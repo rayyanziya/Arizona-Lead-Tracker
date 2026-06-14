@@ -73,8 +73,11 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     volumes:
+      # /app/.sessions resolves to host ./backend/.sessions (via the ./backend:/app
+      # mount, no named volume shadowing it), so a session captured on the host with
+      # `python -m scripts.capture_fb_session --session-dir ./backend/.sessions` is
+      # readable here. Encrypted at rest (Fernet), so the bind mount is safe.
       - ./backend:/app
-      - browser-sessions:/app/.sessions
     shm_size: "1gb"
 
   beat:
@@ -96,4 +99,3 @@ services:
 volumes:
   pgdata:
   redisdata:
-  browser-sessions:

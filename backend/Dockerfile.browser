@@ -1,6 +1,8 @@
 # Heavy worker image for Playwright-based collectors (Facebook, X).
 # The official Playwright image ships Chromium + all OS deps preinstalled.
-FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
+# Use the -noble (Ubuntu 24.04) variant: it bundles Python 3.12, which the
+# project requires (>=3.12); the -jammy variant ships 3.10 and breaks pip install.
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

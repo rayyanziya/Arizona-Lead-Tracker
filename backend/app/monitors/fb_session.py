@@ -18,6 +18,16 @@ from pathlib import Path
 from app.core.security import decrypt_secret, encrypt_secret
 
 
+def session_path(session_dir: str | Path, account: str = "facebook") -> Path:
+    """Canonical on-disk location of an encrypted session for ``account``.
+
+    Both the capture script and the Playwright driver derive the path here, so
+    they can never disagree on where a session lives. Defaults to the Facebook
+    account because that is the first (and, in the MVP, only) browser collector.
+    """
+    return Path(session_dir) / f"{account}.session"
+
+
 def save_session(
     state_json: str,
     path: str | Path,

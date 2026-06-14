@@ -56,9 +56,13 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
   sandbox statically rejects them.
 
 ## Next steps -- Phase 3: Facebook monitor MVP end-to-end
-0. INTEGRATION GATE: docker compose up; `alembic upgrade head` against real Postgres
-   (schema unchanged since Phase 1; e8afdf049539 still complete). Confirm celery_app +
-   jobs import under real deps and a worker boots.
+0. [DONE 2026-06-14] INTEGRATION GATE PASSED: created .env (real Fernet/secret keys;
+   ANTHROPIC + TELEGRAM still placeholders); `docker compose up -d --build` for
+   postgres/redis/api/worker/beat/mailpit (NOT worker-browser yet); `alembic upgrade head`
+   applied e8afdf049539 on real Postgres (11 BASE TABLE = 10 domain + alembic_version);
+   worker booted under real deps -> connected to redis, registered process_post_task /
+   deliver_task / dispatch_due_sources, `celery@... ready`. Confirms celery_app + jobs
+   import cleanly with celery/redis/asyncpg/anthropic present.
 1. [DONE 2026-06-14] monitors/base.py -- Monitor ABC (declares `platform`, `collect()` yields
    RawPost) + run_monitor telemetry (ScrapeRun RUNNING->SUCCESS/BLOCKED/ERROR, post count,
    max_posts cap, swallows collector errors). TDD: 15 unit tests, base.py 98% cov; full unit
@@ -77,12 +81,18 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
     implementing FeedDriver: launch context with decrypted storage_state, goto group,
     scroll, read DOM nodes -> ScrapedPost dicts, detect block. Selectors verified vs the
     live feed, not guessed. NOT imported by monitors/__init__ (keeps units playwright-free).
-3a. [DONE 2026-06-14] monitors/fb_session.py -- save_session/load_session: Fernet-encrypted
-    storage_state at rest (encrypt/decrypt injected -> testable without cryptography). TDD:
-    5 tests, 100% cov. DECISION: encrypted storage_state JSON (matches encrypt_secret), NOT a
-    Playwright persistent-context dir.
-3b. scripts/capture_fb_session.py (Docker/browser only) -- assisted login (handles 2FA),
-    save_session(storage_state) under browser_session_dir.
+3a. [DONE 2026-06-14] monitors/fb_session.py -- save_session/load_session + session_path
+    (canonical <dir>/<account>.session, shared by capture + driver so they never diverge):
+    Fernet-encrypted storage_state at rest (encrypt/decrypt injected -> testable without
+    cryptography). TDD: 8 tests, 100% cov. DECISION: encrypted storage_state JSON (matches
+    encrypt_secret), NOT a Playwright persistent-context dir.
+3b. [DONE 2026-06-14] scripts/capture_fb_session.py (Docker/browser only) -- assisted login:
+    headful Chromium -> human logs in (2FA/checkpoint) -> login detected by polling the
+    `c_user` cookie (no fragile selector) -> json.dumps(storage_state) -> save_session at
+    session_path(settings.browser_session_dir). Run via `make capture-fb`. py_compile + ruff
+    only (Playwright absent locally). OPEN: headful browser inside the Linux container needs a
+    display on Windows (VNC / host-run / bind-mount) -- decide before `make capture-fb` works.
+    Full unit suite now 167 passed.
 4. tasks/jobs.py        register scrape_browser_source (build PlaywrightFeedDriver +
    FacebookMonitor from Settings -> run_monitor -> one process_post_task per RawPost);
    flip dispatch_due_sources to actually send_task.

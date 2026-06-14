@@ -8,10 +8,11 @@ dependency or a configured Fernet key.
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 
 import pytest
 
-from app.monitors.fb_session import load_session, save_session
+from app.monitors.fb_session import load_session, save_session, session_path
 
 
 def _enc(plaintext: str) -> str:
@@ -52,3 +53,16 @@ class TestLoadSession:
     def test_missing_session_raises_clear_error(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="capture_fb_session"):
             load_session(tmp_path / "nope.bin", decrypt=_dec)
+
+
+class TestSessionPath:
+    def test_defaults_to_facebook_account_under_dir(self):
+        assert session_path("/app/.sessions") == Path("/app/.sessions/facebook.session")
+
+    def test_account_is_used_in_filename(self):
+        assert session_path("/app/.sessions", account="x") == Path("/app/.sessions/x.session")
+
+    def test_accepts_path_dir_and_keeps_it_as_parent(self, tmp_path):
+        out = session_path(tmp_path)
+        assert out.parent == tmp_path
+        assert out.name == "facebook.session"
