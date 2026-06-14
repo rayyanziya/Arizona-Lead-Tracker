@@ -8,6 +8,8 @@ asyncio_mode=auto (pyproject) runs the async fixtures/tests directly.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -16,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import get_db
 from app.core.security import hash_password
 from app.main import app
-from app.models import Base, Tenant, User
+from app.models import Base, Match, Post, Tenant, User
 
 
 @pytest_asyncio.fixture
@@ -74,5 +76,69 @@ async def seed_user(session_factory):
             await session.commit()
             await session.refresh(user)
             return user
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def auth(client, seed_user):
+    """A logged-in owner: returns the client, auth header, and the user/tenant."""
+    user = await seed_user()
+    token = (
+        await client.post(
+            "/auth/login", json={"email": "admin@example.com", "password": "secret123"}
+        )
+    ).json()["access_token"]
+    return SimpleNamespace(
+        client=client,
+        headers={"Authorization": f"Bearer {token}"},
+        user=user,
+        tenant_id=user.tenant_id,
+    )
+
+
+@pytest_asyncio.fixture
+async def make_lead(session_factory):
+    """Insert a Post + its Match (a lead) in the given tenant; returns the Match."""
+
+    async def _make(
+        *,
+        tenant_id,
+        external_id="x1",
+        platform="reddit",
+        status="pending",
+        ai_score=8,
+        ai_is_buyer=True,
+        author="someuser",
+        title="Need help",
+        body="looking for a developer to build an app",
+        url=None,
+        matched_term="erp",
+    ):
+        async with session_factory() as session:
+            post = Post(
+                tenant_id=tenant_id,
+                platform=platform,
+                external_id=external_id,
+                url=url or f"https://example.com/{external_id}",
+                author=author,
+                title=title,
+                body=body,
+                content_hash=f"{abs(hash(external_id)):064d}"[:64],
+            )
+            session.add(post)
+            await session.flush()
+            match = Match(
+                tenant_id=tenant_id,
+                post_id=post.id,
+                status=status,
+                ai_score=ai_score,
+                ai_is_buyer=ai_is_buyer,
+                matched_term=matched_term,
+            )
+            session.add(match)
+            await session.commit()
+            await session.refresh(match)
+            return match
 
     return _make
