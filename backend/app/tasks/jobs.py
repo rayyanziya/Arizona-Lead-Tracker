@@ -136,6 +136,19 @@ def _group_id_from_url(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _subreddit_from_identifier(identifier: str) -> str | None:
+    """Pull the subreddit name from a URL, an ``r/<name>``, or a bare ``<name>``."""
+    text = (identifier or "").strip()
+    if not text:
+        return None
+    match = re.search(r"(?:^|/)r/([A-Za-z0-9_]+)", text)
+    if match:
+        return match.group(1)
+    if "/" not in text and re.fullmatch(r"[A-Za-z0-9_]+", text):
+        return text
+    return None
+
+
 def _browser_proxy() -> dict | None:
     """Build a Playwright proxy dict from settings, or None when unconfigured."""
     if not settings.browser_proxy_server:
@@ -199,13 +212,70 @@ def scrape_browser_source(self, source_id: int) -> int:
     return collected
 
 
+@app.task(
+    name="app.tasks.jobs.scrape_reddit_source",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=120,
+)
+def scrape_reddit_source(self, source_id: int) -> int:
+    """Scrape one Reddit source via PRAW, enqueuing each submission to the pipeline.
+
+    Builds a PrawSubmissionFeed + RedditMonitor from Settings and runs it through
+    run_monitor, which records a ScrapeRun and hands each RawPost to on_post -- here,
+    process_post_task. Runs on the light worker's ``reddit`` queue (no browser), so
+    PRAW is imported lazily and never loaded by beat or the browser worker.
+    """
+    from app.monitors.base import run_monitor
+    from app.monitors.reddit import RedditMonitor
+    from app.monitors.reddit_client import PrawSubmissionFeed
+
+    with session_scope() as session:
+        source = session.get(MonitoredSource, source_id)
+        if source is None or not source.is_active:
+            logger.warning("scrape_reddit_source: source %s missing or inactive", source_id)
+            return 0
+        subreddit = _subreddit_from_identifier(source.identifier)
+        if subreddit is None:
+            logger.warning(
+                "scrape_reddit_source: no subreddit in source=%s identifier=%r",
+                source_id,
+                source.identifier,
+            )
+            return 0
+        tenant_id = source.tenant_id
+        feed = PrawSubmissionFeed(
+            subreddit,
+            client_id=settings.reddit_client_id,
+            client_secret=settings.reddit_client_secret,
+            user_agent=settings.reddit_user_agent,
+            limit=settings.scrape_max_posts_per_run,
+        )
+        monitor = RedditMonitor(
+            feed,
+            source_id=source.id,
+            max_posts=settings.scrape_max_posts_per_run,
+        )
+        run = run_monitor(
+            session,
+            tenant_id,
+            monitor,
+            on_post=lambda raw: process_post_task.delay(tenant_id, raw.model_dump(mode="json")),
+            max_posts=settings.scrape_max_posts_per_run,
+        )
+        collected = run.posts_collected
+    logger.info("scrape_reddit_source: source=%s collected=%s", source_id, collected)
+    return collected
+
+
 @app.task(name="app.tasks.jobs.dispatch_due_sources")
 def dispatch_due_sources() -> int:
     """Beat entrypoint: enqueue one scrape per active source, routed by platform.
 
-    Facebook sources go to the browser queue (scrape_browser_source). Reddit (Phase 4)
-    and X (Phase 5) collectors do not exist yet, so those sources are logged and skipped
-    rather than dispatched into a queue no worker serves.
+    Facebook sources go to the browser queue (scrape_browser_source); Reddit sources
+    go to the reddit queue (scrape_reddit_source). X (Phase 5) has no collector yet, so
+    those sources are logged and skipped rather than dispatched into a queue no worker
+    serves.
     """
     with session_scope() as session:
         sources = (
@@ -219,6 +289,11 @@ def dispatch_due_sources() -> int:
         if platform is Platform.FACEBOOK:
             app.send_task(
                 "app.tasks.jobs.scrape_browser_source", args=[source_id], queue="browser"
+            )
+            dispatched += 1
+        elif platform is Platform.REDDIT:
+            app.send_task(
+                "app.tasks.jobs.scrape_reddit_source", args=[source_id], queue="reddit"
             )
             dispatched += 1
         else:

@@ -110,7 +110,37 @@ app.tasks.jobs, and app.core.database import Docker-only deps -> not imported by
    `docker compose exec worker-browser python -c "from app.tasks.jobs import dispatch_due_sources as d; print(d())"`
    or wait for beat -> watch worker-browser + worker logs -> Telegram. (e) verify _EXTRACT_JS
    selectors against the live feed; adjust if the run collects 0 posts.
-Then Phase 4 (Reddit/PRAW), 5 (X scrape), 6 (FastAPI + React dashboard/admin + JWT),
+## Phase 4 -- Reddit monitor (DONE 2026-06-14, TDD)
+Same pure/driver split as Facebook; PRAW is read-only and needs no headful login, so
+Reddit is simpler than FB (no DOM, no scroll, no anti-ban pacing -- the official API
+rate-limits us).
+- monitors/reddit_parser.py -- PURE submission-dict -> RawPost (reddit url from
+  relative/absolute permalink else redd.it/<id> shortlink; title kept distinct from
+  selftext body; unix/ISO created_utc -> tz-aware UTC; drop elements with no
+  external_id). Defines the RedditSubmission contract the PRAW driver emits.
+- monitors/reddit.py -- RedditMonitor(Monitor) + SubmissionFeed Protocol (fetch/close).
+  PURE collection brain: in-run dedup by external_id, max_posts cap, propagates
+  MonitorBlocked from the feed. Driver-free, unit-tested vs a fake feed.
+- monitors/reddit_client.py -- PrawSubmissionFeed (Docker/integration only; NOT imported
+  by monitors/__init__). Lazy read-only praw.Reddit; lists subreddit.<new|hot|rising|top>;
+  maps prawcore Forbidden/NotFound/Redirect -> MonitorBlocked. py_compile + ruff only
+  (praw absent locally). The only unverified surface is _to_dict's PRAW field names
+  (submission.id/title/selftext/author/permalink/created_utc) -- standard PRAW attrs,
+  lower risk than FB's DOM selectors.
+- tasks/jobs.py -- scrape_reddit_source task (deferred praw imports; reddit queue, served
+  by the light `worker`); _subreddit_from_identifier (URL / r/<name> / bare name);
+  dispatch_due_sources now routes Platform.REDDIT -> "reddit" queue (celery_app already
+  had the route). Only X is logged+skipped now.
+- scripts/seed.py -- added a placeholder Reddit source
+  (https://www.reddit.com/r/REPLACE_WITH_SUBREDDIT), mirroring the FB placeholder.
+- TDD: 19 new monitor/parser tests + 1 seed test; full unit suite 187 passed, ruff clean.
+- E2E (NEEDS USER): put real REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET (and optionally a
+  custom REDDIT_USER_AGENT) in .env; replace REPLACE_WITH_SUBREDDIT in seed.py (or UPDATE
+  the row) with a real subreddit; `make seed`; trigger
+  `docker compose exec worker python -c "from app.tasks.jobs import dispatch_due_sources as d; print(d())"`
+  or wait for beat -> watch `worker` + pipeline logs -> Telegram. No login/session needed.
+
+Then Phase 5 (X scrape), 6 (FastAPI + React dashboard/admin + JWT),
 7 (productionization / RLS).
 
 ## Locked decisions

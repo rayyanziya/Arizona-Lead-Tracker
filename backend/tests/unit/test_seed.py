@@ -52,6 +52,9 @@ class TestSeedPlan:
     def test_has_a_facebook_source(self):
         assert any(s.platform == "facebook" for s in build_seed_plan().sources)
 
+    def test_has_a_reddit_source(self):
+        assert any(s.platform == "reddit" for s in build_seed_plan().sources)
+
 
 class TestSeedWriter:
     def test_seed_creates_expected_rows(self):

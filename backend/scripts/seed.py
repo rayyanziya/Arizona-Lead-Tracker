@@ -76,6 +76,11 @@ def build_seed_plan() -> SeedPlan:
             "https://www.facebook.com/groups/REPLACE_WITH_GROUP_ID",
             "Example UMKM / Business Group",
         ),
+        SourceSeed(
+            "reddit",
+            "https://www.reddit.com/r/REPLACE_WITH_SUBREDDIT",
+            "Example Subreddit",
+        ),
     ]
     notifications = [
         NotificationSeed("telegram", True, 7, {"chat_id": ""}),
