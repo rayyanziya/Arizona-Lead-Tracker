@@ -170,8 +170,19 @@ explicitly tested (no cross-tenant read/write). Built in 4 chunks:
   python-multipart. httpx + pytest-asyncio were already present. asyncpg/psycopg
   still Docker-only (C builds) -- the lazy-engine refactor is what lets app.main
   import without them.
-- REMAINING: chunk 5 = React dashboard (frontend/ -- does not exist yet; login +
-  leads table + keyword/source admin; user runs it to see it). Then Phase 5 (X), 7.
+- chunk 5: React dashboard (frontend/). Vite + React 18 + TS, NO router/query libs
+  (tab state in App.tsx). src/lib/api.ts = fetch wrapper, JWT in localStorage
+  (key alt_token), Bearer on every call, 401 -> clear token + reload to login.
+  Components: Login (email/pw -> /auth/login -> /auth/me), Leads (filter
+  status/platform/min_score, paginate 50, triage buttons PATCH /leads/{id}),
+  Keywords + Sources (admin CRUD). src/types.ts mirrors backend enums
+  (Platform/MatchStatus/Language/MatchType). Talks to backend via /api prefix:
+  Vite dev proxy /api -> :8000 (VITE_API_TARGET), nginx /api/ -> api:8000 in prod.
+  Dockerfile (node build -> nginx serve + proxy), nginx.conf, frontend service in
+  docker-compose (8080:80, depends_on api). VALIDATED: `npm run build`
+  (tsc --noEmit && vite build) GREEN -> dist/ 157kB (49kB gz). Node 20+ to run.
+- REMAINING: Phase 5 (X/Twitter scrape, deferred), Phase 7 (productionization / RLS).
+  No frontend unit tests yet (toolchain not set up; build/typecheck is the gate).
 
 Then Phase 5 (X scrape, deferred), 7 (productionization / RLS).
 

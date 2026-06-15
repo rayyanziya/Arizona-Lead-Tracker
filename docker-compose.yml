@@ -89,6 +89,17 @@ services:
     volumes:
       - ./backend:/app
 
+  # Dashboard SPA. nginx serves the built bundle and proxies /api -> api:8000,
+  # so the browser only talks to this one origin (8080).
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
   # Local email sink (SMTP on 1025, web UI on 8025). Swap for real SMTP in prod.
   mailpit:
     image: axllent/mailpit:latest
