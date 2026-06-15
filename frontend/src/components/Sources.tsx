@@ -90,7 +90,7 @@ export default function Sources() {
             <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
               {PLATFORMS.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {p === "facebook" ? "facebook (experimental)" : p}
                 </option>
               ))}
             </select>
@@ -115,11 +115,16 @@ export default function Sources() {
           </div>
         </form>
         {platform === "facebook" && (
-          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-            Facebook is monitored per group — add each group separately. Paste the group
-            URL (<code>facebook.com/groups/&lt;id&gt;</code>) or just the id/name. To find it,
-            open the group and copy the URL from your browser. (There's no Facebook-wide
-            search; add as many groups as you like.)
+          <div className="muted" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.5 }}>
+            <strong style={{ color: "var(--warn)" }}>⚠ Experimental.</strong> Facebook has no
+            public search, so it's monitored <em>per group</em> (add each one separately). Paste
+            the group URL (<code>facebook.com/groups/&lt;id&gt;</code>) or just the id/name.
+            <br />
+            Before it can collect anything you must capture a logged-in Facebook session
+            (<code>scripts/capture_fb_session</code>) and set an Anthropic API key. Scraping
+            Facebook is against its Terms — use a throwaway account, never your main. The page
+            selectors are best-effort and may need adjusting against the live site. Reddit is the
+            reliable source; treat Facebook as unproven.
           </div>
         )}
       </div>
@@ -146,6 +151,11 @@ export default function Sources() {
                 <tr key={s.id}>
                   <td>
                     <span className={`badge ${s.platform}`}>{s.platform}</span>
+                    {s.platform === "facebook" && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        experimental
+                      </div>
+                    )}
                   </td>
                   <td>{s.identifier}</td>
                   <td className="muted">{s.label || "—"}</td>

@@ -7,7 +7,7 @@ routers; auth is wired first, with matches/keywords/sources to follow.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, keywords, leads, sources
+from app.api import auth, keywords, leads, sources, status
 from app.core.config import settings
 from app.core.logging import configure_logging
 
@@ -28,6 +28,7 @@ app.include_router(auth.router)
 app.include_router(leads.router)
 app.include_router(keywords.router)
 app.include_router(sources.router)
+app.include_router(status.router)
 
 
 @app.get("/health", tags=["health"])

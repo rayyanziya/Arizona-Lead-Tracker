@@ -197,6 +197,18 @@ explicitly tested (no cross-tenant read/write). Built in 4 chunks:
   migrations via `docker compose exec api alembic upgrade head`). api uses --reload on a
   bind mount so backend edits are live; frontend is a built image -> rebuild with
   `docker compose up -d --build frontend` to see frontend changes.
+- CONFIG-STATUS indicator (so "added a source, no leads" is self-diagnosing):
+  app/services/config_status.py config_status(settings, *, facebook_session_present)
+  -> ConfigStatus dataclass of capability booleans (scoring/reddit/facebook_session/
+  telegram/email). GET /status (app/api/status.py, auth-gated, ConfigStatusOut,
+  mounted in main.py) checks Anthropic key + Reddit creds + fb_session.session_path
+  exists. Frontend components/ConfigBanner.tsx (fetched in App content) shows ✓/✗
+  chips + hard-block messages (no Anthropic -> nothing scored; no collector ->
+  nothing collected). Tests: tests/unit/test_config_status.py (7) +
+  tests/api/test_status.py (2). Full tree 251 passed; ruff clean on changed files.
+- OPERATOR .env REALITY (observed live via /status on 2026-06-15): scoring/telegram/
+  email configured; reddit + facebook NOT. So leads need a collector: add
+  REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET (reliable) or capture a FB session.
 - REMAINING: Phase 5 (X/Twitter scrape, deferred), Phase 7 (productionization / RLS).
   No frontend unit tests yet (toolchain not set up; build/typecheck is the gate).
   Optional: validate FB identifier on PATCH /sources too (create is validated; update

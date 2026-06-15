@@ -66,3 +66,18 @@ export interface Source {
   last_scraped_at: string | null;
   created_at: string;
 }
+
+export interface ConfigStatus {
+  scoring_configured: boolean;
+  reddit_configured: boolean;
+  facebook_session_present: boolean;
+  telegram_configured: boolean;
+  email_configured: boolean;
+}
+
+export interface TestScoreResult {
+  is_buyer: boolean;
+  confidence: number;
+  reason: string;
+  model: string;
+}

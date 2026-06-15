@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, clearToken, getToken } from "./lib/api";
 import type { User } from "./types";
 import Login from "./components/Login";
+import ConfigBanner from "./components/ConfigBanner";
 import Leads from "./components/Leads";
 import Keywords from "./components/Keywords";
 import Sources from "./components/Sources";
@@ -62,6 +63,7 @@ export default function App() {
         </div>
       </div>
       <div className="content">
+        <ConfigBanner />
         {tab === "leads" && <Leads />}
         {tab === "keywords" && <Keywords />}
         {tab === "sources" && <Sources />}

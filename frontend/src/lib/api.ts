@@ -2,7 +2,15 @@
 // logged in; every request attaches it as a Bearer token. A 401 clears the
 // token and reloads, dropping the user back to the login screen.
 
-import type { Keyword, Lead, LeadList, Source, User } from "../types";
+import type {
+  ConfigStatus,
+  Keyword,
+  Lead,
+  LeadList,
+  Source,
+  TestScoreResult,
+  User,
+} from "../types";
 
 const TOKEN_KEY = "alt_token";
 
@@ -78,6 +86,12 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<User>("/auth/me"),
+  status: () => request<ConfigStatus>("/status"),
+  testScore: (body: { title?: string; body: string }) =>
+    request<TestScoreResult>("/status/test-score", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   listLeads: (params: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams();
