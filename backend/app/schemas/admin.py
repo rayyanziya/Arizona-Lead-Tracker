@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.models import Language, MatchType, Platform
+from app.services.facebook_group import facebook_group_id
 
 
 def _require_nonblank(value: str) -> str:
@@ -57,6 +58,18 @@ class SourceCreate(BaseModel):
     is_active: bool = True
 
     _identifier = field_validator("identifier")(_require_nonblank)
+
+    @model_validator(mode="after")
+    def _facebook_identifier_is_a_group(self) -> SourceCreate:
+        # Facebook can only be monitored per-group, so a Facebook source must
+        # resolve to a group (URL or bare id). Rejecting here means the operator
+        # gets a 422 at add-time instead of a source that silently scrapes nothing.
+        if self.platform is Platform.FACEBOOK and facebook_group_id(self.identifier) is None:
+            raise ValueError(
+                "Facebook source must be a group URL or id, e.g. "
+                "https://facebook.com/groups/<id> or just <id>"
+            )
+        return self
 
 
 class SourceUpdate(BaseModel):

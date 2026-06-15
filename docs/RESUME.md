@@ -181,8 +181,26 @@ explicitly tested (no cross-tenant read/write). Built in 4 chunks:
   Dockerfile (node build -> nginx serve + proxy), nginx.conf, frontend service in
   docker-compose (8080:80, depends_on api). VALIDATED: `npm run build`
   (tsc --noEmit && vite build) GREEN -> dist/ 157kB (49kB gz). Node 20+ to run.
+- POLISH (Facebook multi-group): shared pure parser app/services/facebook_group.py
+  facebook_group_id() accepts full/mobile/relative URL, bare numeric id, or vanity
+  slug -> canonical token (None if not a group). Used by BOTH SourceCreate
+  (schemas/admin.py model_validator: platform==FACEBOOK with no parseable group
+  -> 422 at add-time) AND the scraper (jobs.py _group_id_from_url now delegates to
+  it, so bare ids/mobile URLs work). Frontend: api.ts extractDetail() renders
+  FastAPI 422 detail lists as readable text (strips "Value error, "); Sources.tsx
+  shows a per-group hint when platform=facebook. Tests: tests/unit/test_facebook_group.py
+  (14) + 2 api/test_sources.py cases. Full tree 242 passed. ruff clean on all changed
+  files (5 pre-existing UP007 in alembic/versions migration are untouched boilerplate).
+  Verified live: bad FB id -> 422 clean msg, bare id -> 201.
+- LIVE STACK: `docker compose up` -> dashboard :8080, api :8000. Seeded login is
+  admin@example.com / changeme123 (run `docker compose exec api python -m scripts.seed`;
+  migrations via `docker compose exec api alembic upgrade head`). api uses --reload on a
+  bind mount so backend edits are live; frontend is a built image -> rebuild with
+  `docker compose up -d --build frontend` to see frontend changes.
 - REMAINING: Phase 5 (X/Twitter scrape, deferred), Phase 7 (productionization / RLS).
   No frontend unit tests yet (toolchain not set up; build/typecheck is the gate).
+  Optional: validate FB identifier on PATCH /sources too (create is validated; update
+  path not yet -- low risk since platform can't change on update).
 
 Then Phase 5 (X scrape, deferred), 7 (productionization / RLS).
 

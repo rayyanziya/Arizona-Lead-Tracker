@@ -114,6 +114,14 @@ export default function Sources() {
             </button>
           </div>
         </form>
+        {platform === "facebook" && (
+          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            Facebook is monitored per group — add each group separately. Paste the group
+            URL (<code>facebook.com/groups/&lt;id&gt;</code>) or just the id/name. To find it,
+            open the group and copy the URL from your browser. (There's no Facebook-wide
+            search; add as many groups as you like.)
+          </div>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}

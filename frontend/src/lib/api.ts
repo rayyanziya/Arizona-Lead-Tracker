@@ -24,6 +24,23 @@ export class ApiError extends Error {
   }
 }
 
+// FastAPI returns errors as {detail: string} for HTTPException and
+// {detail: [{loc, msg, ...}]} for request-validation (422). Turn either into a
+// readable sentence, dropping Pydantic's "Value error, " prefix.
+function extractDetail(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const detail = (data as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((e) => (e && typeof e === "object" ? String((e as { msg?: unknown }).msg ?? "") : ""))
+      .filter(Boolean)
+      .map((m) => m.replace(/^Value error,\s*/, ""));
+    if (msgs.length) return msgs.join("; ");
+  }
+  return null;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers = new Headers(options.headers);
@@ -44,7 +61,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let detail = res.statusText;
     try {
       const data = await res.json();
-      if (data?.detail) detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+      detail = extractDetail(data) ?? detail;
     } catch {
       /* non-JSON error body */
     }

@@ -24,6 +24,7 @@ from app.core.database import session_scope
 from app.models import Keyword as KeywordRow
 from app.models import MonitoredSource, Platform
 from app.schemas.raw_post import RawPost
+from app.services.facebook_group import facebook_group_id
 from app.services.keyword_matcher import Keyword
 from app.tasks.celery_app import app
 from app.tasks.notify import build_senders, deliver
@@ -131,9 +132,12 @@ def deliver_task(self, notification_id: int) -> bool:
 
 
 def _group_id_from_url(url: str) -> str | None:
-    """Pull the group id/slug out of a .../groups/<id>/... URL."""
-    match = re.search(r"/groups/([^/?#]+)", url or "")
-    return match.group(1) if match else None
+    """Resolve a source's stored Facebook identifier to a group id/slug.
+
+    Delegates to the shared parser so the scraper accepts exactly what the API
+    accepts -- a full/mobile URL, a relative groups/<id> path, or a bare id.
+    """
+    return facebook_group_id(url)
 
 
 def _subreddit_from_identifier(identifier: str) -> str | None:

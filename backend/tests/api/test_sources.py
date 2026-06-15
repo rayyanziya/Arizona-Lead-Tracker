@@ -40,6 +40,28 @@ async def test_create_rejects_bad_platform(auth):
     assert resp.status_code == 422
 
 
+async def test_create_rejects_facebook_identifier_that_is_not_a_group(auth):
+    # Free text isn't a group reference; reject at creation rather than letting
+    # the scraper silently target nothing.
+    resp = await auth.client.post(
+        "/sources",
+        json={"platform": "facebook", "identifier": "looking for leads"},
+        headers=auth.headers,
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_accepts_bare_facebook_group_id(auth):
+    # An operator may paste just the numeric id; that's a valid group reference.
+    resp = await auth.client.post(
+        "/sources",
+        json={"platform": "facebook", "identifier": "123456789"},
+        headers=auth.headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["identifier"] == "123456789"
+
+
 async def test_update_source(auth):
     sid = (
         await auth.client.post(
