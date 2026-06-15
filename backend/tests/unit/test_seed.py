@@ -55,6 +55,16 @@ class TestSeedPlan:
     def test_has_a_reddit_source(self):
         assert any(s.platform == "reddit" for s in build_seed_plan().sources)
 
+    def test_user_email_is_accepted_by_the_login_validator(self):
+        # Regression: the login route validates email with Pydantic EmailStr,
+        # which rejects special-use TLDs like ".local". A seed user whose email
+        # the login endpoint refuses can never sign in, so pin the seed email to
+        # the very validator the API uses.
+        from app.schemas.auth import LoginRequest
+
+        plan = build_seed_plan()
+        LoginRequest(email=plan.user_email, password=plan.user_password)
+
 
 class TestSeedWriter:
     def test_seed_creates_expected_rows(self):

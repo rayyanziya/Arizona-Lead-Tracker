@@ -89,7 +89,10 @@ def build_seed_plan() -> SeedPlan:
     return SeedPlan(
         tenant_name="Arizona Lead Tracker",
         tenant_slug="arizona",
-        user_email="admin@arizona-tracker.local",
+        # NOTE: a real, non-special-use domain. The login route validates email
+        # with Pydantic EmailStr, which rejects reserved TLDs like ".local" -- a
+        # seed user on such a domain could never sign in (see test_seed.py).
+        user_email="admin@example.com",
         user_password="changeme123",
         user_full_name="Arizona Admin",
         keywords=keywords,
