@@ -29,9 +29,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (u: User) => void })
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <h1>
-          Arizona Lead Tracker
-        </h1>
+        <h1>Arizona Lead Tracker</h1>
         <p className="sub">Sign in to your workspace</p>
         <div className="field">
           <label htmlFor="email">Email</label>

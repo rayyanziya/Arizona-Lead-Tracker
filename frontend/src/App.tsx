@@ -41,9 +41,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="topbar">
-        <div className="brand">
-          Arizona <span>Lead</span> Tracker
-        </div>
+        <div className="brand">Arizona Lead Tracker</div>
         <div className="tabs">
           <button className={tab === "leads" ? "active" : ""} onClick={() => setTab("leads")}>
             Leads
