@@ -18,6 +18,7 @@ from typing import Any
 class ConfigStatus:
     scoring_configured: bool  # Anthropic key set -> scraped posts get scored
     reddit_configured: bool  # Reddit API id + secret set -> Reddit can collect
+    x_configured: bool  # X API bearer token set -> X can collect
     facebook_session_present: bool  # captured FB login session exists on disk
     telegram_configured: bool  # Telegram bot token set -> Telegram alerts
     email_configured: bool  # SMTP host set -> email alerts
@@ -32,6 +33,7 @@ def config_status(settings: Any, *, facebook_session_present: bool) -> ConfigSta
     return ConfigStatus(
         scoring_configured=_has(settings.anthropic_api_key),
         reddit_configured=_has(settings.reddit_client_id) and _has(settings.reddit_client_secret),
+        x_configured=_has(settings.x_bearer_token),
         facebook_session_present=facebook_session_present,
         telegram_configured=_has(settings.telegram_bot_token),
         email_configured=_has(settings.smtp_host),

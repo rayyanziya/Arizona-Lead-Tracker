@@ -76,6 +76,41 @@ async def test_update_source(auth):
     assert resp.json()["label"] == "off"
 
 
+async def test_update_facebook_source_rejects_non_group_identifier(auth):
+    # Creation validates that a Facebook identifier resolves to a group; editing
+    # must hold the same line, or an operator could quietly turn a working source
+    # into one that scrapes nothing.
+    sid = (
+        await auth.client.post(
+            "/sources",
+            json={"platform": "facebook", "identifier": "https://facebook.com/groups/1"},
+            headers=auth.headers,
+        )
+    ).json()["id"]
+    resp = await auth.client.patch(
+        f"/sources/{sid}", json={"identifier": "looking for leads"}, headers=auth.headers
+    )
+    assert resp.status_code == 422
+    # The bad edit must not have been persisted.
+    listing = await auth.client.get("/sources", headers=auth.headers)
+    assert listing.json()[0]["identifier"] == "https://facebook.com/groups/1"
+
+
+async def test_update_facebook_source_accepts_a_valid_group_identifier(auth):
+    sid = (
+        await auth.client.post(
+            "/sources",
+            json={"platform": "facebook", "identifier": "https://facebook.com/groups/1"},
+            headers=auth.headers,
+        )
+    ).json()["id"]
+    resp = await auth.client.patch(
+        f"/sources/{sid}", json={"identifier": "987654321"}, headers=auth.headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["identifier"] == "987654321"
+
+
 async def test_delete_source(auth):
     sid = (
         await auth.client.post(

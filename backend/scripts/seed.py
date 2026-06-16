@@ -81,6 +81,13 @@ def build_seed_plan() -> SeedPlan:
             "https://www.reddit.com/r/REPLACE_WITH_SUBREDDIT",
             "Example Subreddit",
         ),
+        # A handle (<=15 chars) so build_query narrows it to from:<handle>; an
+        # operator can instead use a profile URL or free text/hashtag search.
+        SourceSeed(
+            "x",
+            "@REPLACE_HANDLE",
+            "Example X account",
+        ),
     ]
     notifications = [
         NotificationSeed("telegram", True, 7, {"chat_id": ""}),

@@ -35,6 +35,7 @@ app.conf.update(
         Queue("pipeline"),
         Queue("notify"),
         Queue("reddit"),
+        Queue("x"),
         Queue("browser"),
     ),
     task_routes={
@@ -43,6 +44,7 @@ app.conf.update(
         "app.tasks.jobs.dispatch_due_sources": {"queue": "pipeline"},
         # Phase 3+ platform scrapers route to their isolated queues:
         "app.tasks.jobs.scrape_reddit_source": {"queue": "reddit"},
+        "app.tasks.jobs.scrape_x_source": {"queue": "x"},
         "app.tasks.jobs.scrape_browser_source": {"queue": "browser"},
     },
     beat_schedule={

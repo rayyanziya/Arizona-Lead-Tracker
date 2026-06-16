@@ -11,6 +11,7 @@ from app.services.scoring import TOOL_NAME
 _KEYS = {
     "scoring_configured",
     "reddit_configured",
+    "x_configured",
     "facebook_session_present",
     "telegram_configured",
     "email_configured",

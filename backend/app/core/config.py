@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     reddit_client_secret: str = ""
     reddit_user_agent: str = "arizona-lead-tracker/0.1"
 
+    # --- X (Twitter) ---
+    # App-only bearer token for the v2 recent-search endpoint; empty disables the
+    # X collector (dispatch logs and skips X sources, like missing Reddit creds).
+    x_bearer_token: str = ""
+
     # --- Browser automation ---
     browser_session_dir: str = "/app/.sessions"
     browser_headless: bool = True

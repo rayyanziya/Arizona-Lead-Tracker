@@ -50,19 +50,20 @@ services:
     volumes:
       - ./backend:/app
 
-  # Lightweight worker: Reddit collection, the shared pipeline, and notifications.
+  # Lightweight worker: Reddit + X (API) collection, the shared pipeline, and
+  # notifications. X uses the official API (no browser), so it lives here.
   worker:
     build: *backend-build
     <<: *backend-env
-    command: celery -A app.tasks.celery_app worker --loglevel=info -Q reddit,pipeline,notify --concurrency=4
+    command: celery -A app.tasks.celery_app worker --loglevel=info -Q reddit,x,pipeline,notify --concurrency=4
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     volumes:
       - ./backend:/app
 
-  # Heavy worker: Playwright (Facebook + X). Low concurrency, isolated so a
-  # blocked browser never starves Reddit collection or notification delivery.
+  # Heavy worker: Playwright (Facebook only). Low concurrency, isolated so a
+  # blocked browser never starves Reddit/X collection or notification delivery.
   worker-browser:
     build:
       context: ./backend

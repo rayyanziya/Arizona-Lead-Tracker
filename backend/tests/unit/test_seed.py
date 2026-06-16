@@ -55,6 +55,19 @@ class TestSeedPlan:
     def test_has_a_reddit_source(self):
         assert any(s.platform == "reddit" for s in build_seed_plan().sources)
 
+    def test_has_an_x_source(self):
+        assert any(s.platform == "x" for s in build_seed_plan().sources)
+
+    def test_x_source_identifier_yields_a_query(self):
+        # The X placeholder must be a shape the collector accepts, so an operator
+        # who edits it to a real handle gets a working source. build_query returns
+        # None for input it can't turn into a recent-search query.
+        from app.monitors.x_client import build_query
+
+        x_sources = [s for s in build_seed_plan().sources if s.platform == "x"]
+        assert x_sources
+        assert all(build_query(s.identifier) is not None for s in x_sources)
+
     def test_user_email_is_accepted_by_the_login_validator(self):
         # Regression: the login route validates email with Pydantic EmailStr,
         # which rejects special-use TLDs like ".local". A seed user whose email

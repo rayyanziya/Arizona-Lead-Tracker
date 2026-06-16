@@ -28,6 +28,7 @@ dependencies = [
     "python-multipart>=0.0.12",
     # Platform collectors
     "praw>=7.8",
+    "tweepy>=4.14",
     "playwright>=1.49",
 ]
 

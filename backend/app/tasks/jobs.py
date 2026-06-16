@@ -272,14 +272,68 @@ def scrape_reddit_source(self, source_id: int) -> int:
     return collected
 
 
+@app.task(
+    name="app.tasks.jobs.scrape_x_source",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=120,
+)
+def scrape_x_source(self, source_id: int) -> int:
+    """Scrape one X source via the v2 API, enqueuing each tweet to the pipeline.
+
+    Builds an ApiTweetFeed + XMonitor from Settings and runs it through run_monitor,
+    which records a ScrapeRun and hands each RawPost to on_post -- here,
+    process_post_task. Runs on the light worker's ``x`` queue (no browser); tweepy is
+    imported lazily and never loaded by beat or the browser worker.
+    """
+    from app.monitors.base import run_monitor
+    from app.monitors.x import XMonitor
+    from app.monitors.x_client import ApiTweetFeed, build_query
+
+    with session_scope() as session:
+        source = session.get(MonitoredSource, source_id)
+        if source is None or not source.is_active:
+            logger.warning("scrape_x_source: source %s missing or inactive", source_id)
+            return 0
+        query = build_query(source.identifier)
+        if query is None:
+            logger.warning(
+                "scrape_x_source: no query in source=%s identifier=%r",
+                source_id,
+                source.identifier,
+            )
+            return 0
+        tenant_id = source.tenant_id
+        feed = ApiTweetFeed(
+            query,
+            bearer_token=settings.x_bearer_token,
+            max_results=settings.scrape_max_posts_per_run,
+        )
+        monitor = XMonitor(
+            feed,
+            source_id=source.id,
+            max_posts=settings.scrape_max_posts_per_run,
+        )
+        run = run_monitor(
+            session,
+            tenant_id,
+            monitor,
+            on_post=lambda raw: process_post_task.delay(tenant_id, raw.model_dump(mode="json")),
+            max_posts=settings.scrape_max_posts_per_run,
+        )
+        collected = run.posts_collected
+    logger.info("scrape_x_source: source=%s collected=%s", source_id, collected)
+    return collected
+
+
 @app.task(name="app.tasks.jobs.dispatch_due_sources")
 def dispatch_due_sources() -> int:
     """Beat entrypoint: enqueue one scrape per active source, routed by platform.
 
     Facebook sources go to the browser queue (scrape_browser_source); Reddit sources
-    go to the reddit queue (scrape_reddit_source). X (Phase 5) has no collector yet, so
-    those sources are logged and skipped rather than dispatched into a queue no worker
-    serves.
+    go to the reddit queue (scrape_reddit_source); X sources go to the x queue
+    (scrape_x_source). An unknown platform is logged and skipped rather than dispatched
+    into a queue no worker serves.
     """
     with session_scope() as session:
         sources = (
@@ -299,6 +353,9 @@ def dispatch_due_sources() -> int:
             app.send_task(
                 "app.tasks.jobs.scrape_reddit_source", args=[source_id], queue="reddit"
             )
+            dispatched += 1
+        elif platform is Platform.X:
+            app.send_task("app.tasks.jobs.scrape_x_source", args=[source_id], queue="x")
             dispatched += 1
         else:
             logger.info(

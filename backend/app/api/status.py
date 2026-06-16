@@ -25,6 +25,7 @@ class ConfigStatusOut(BaseModel):
 
     scoring_configured: bool
     reddit_configured: bool
+    x_configured: bool
     facebook_session_present: bool
     telegram_configured: bool
     email_configured: bool

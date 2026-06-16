@@ -209,12 +209,49 @@ explicitly tested (no cross-tenant read/write). Built in 4 chunks:
 - OPERATOR .env REALITY (observed live via /status on 2026-06-15): scoring/telegram/
   email configured; reddit + facebook NOT. So leads need a collector: add
   REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET (reliable) or capture a FB session.
-- REMAINING: Phase 5 (X/Twitter scrape, deferred), Phase 7 (productionization / RLS).
-  No frontend unit tests yet (toolchain not set up; build/typecheck is the gate).
-  Optional: validate FB identifier on PATCH /sources too (create is validated; update
-  path not yet -- low risk since platform can't change on update).
+- REMAINING: Phase 7 (productionization / RLS). No frontend unit tests yet
+  (toolchain not set up; build/typecheck is the gate).
+- [DONE 2026-06-16] FB identifier now validated on PATCH /sources too (was the
+  "optional" item): api/sources.py update_source rejects a Facebook source whose
+  new identifier has no parseable group id -> 422, reusing facebook_group_id().
+  2 new api/test_sources.py cases.
 
-Then Phase 5 (X scrape, deferred), 7 (productionization / RLS).
+## Phase 5 -- X (Twitter) monitor (DONE 2026-06-16, TDD)
+Official API v2 recent-search (tweepy), NOT scrape -- same pure/driver split as
+Reddit (no DOM, no anti-ban pacing; the API paginates + rate-limits us). Chose the
+API over scraping for reliability; the locked "X=scrape with official-API fallback"
+note is inverted in practice (API primary).
+- monitors/x_parser.py -- PURE tweet-dict -> RawPost (canonical x.com/<handle>/status/<id>
+  url built from handle + id when url absent; unix/ISO/naive ts -> tz-aware UTC; title
+  empty, text is the body; drop elements with no external_id). Defines the tweet-dict
+  contract the API client emits.
+- monitors/x.py -- XMonitor(Monitor) + TweetFeed Protocol (fetch/close). PURE collection
+  brain: in-run dedup by external_id, max_posts cap, propagates MonitorBlocked from the
+  feed. Driver-free, unit-tested vs a fake feed. platform = Platform.X.
+- monitors/x_client.py -- ApiTweetFeed (tweepy imported LAZILY in _ensure_client, so the
+  module imports venv-side without tweepy and units inject a fake client) + build_query
+  (handle/@handle/profile URL -> from:<handle>; else free text/hashtag verbatim; blank ->
+  None so the task skips). Auth/permission/rate-limit errors matched by CLASS NAME
+  (TooManyRequests/Unauthorized/Forbidden) -> MonitorBlocked, needing no tweepy on the
+  error path. max_results clamped to X's 10..100. Unverified surface: tweepy field names
+  in _to_dict (standard v2 attrs, low risk).
+- tasks/jobs.py -- scrape_x_source task (deferred tweepy imports; x queue, served by the
+  light `worker`); dispatch_due_sources now routes Platform.X -> "x" queue (only unknown
+  platforms are logged+skipped now). celery_app.py adds the x Queue + route.
+- docker-compose.yml -- light `worker` now serves -Q reddit,x,pipeline,notify (X has no
+  browser); worker-browser is Facebook-only.
+- Wiring: config.py x_bearer_token; config_status x_configured + GET /status x_configured
+  + frontend ConfigBanner X chip + types.ts; .env.example X_BEARER_TOKEN; pyproject tweepy.
+- scripts/seed.py -- placeholder X source (@REPLACE_HANDLE, a valid handle shape so
+  build_query yields from:REPLACE_HANDLE), mirroring the FB/Reddit placeholders.
+- TDD: 34 X monitor/parser/client tests + 2 seed tests; full tree 295 passed, ruff clean.
+- E2E (NEEDS USER): put a real X_BEARER_TOKEN (app-only bearer, X developer portal) in
+  .env; replace @REPLACE_HANDLE in seed.py (or UPDATE the row) with a real handle/hashtag/
+  free-text query; `make seed`; trigger
+  `docker compose exec worker python -c "from app.tasks.jobs import dispatch_due_sources as d; print(d())"`
+  or wait for beat -> watch `worker` + pipeline logs -> Telegram. No login/session needed.
+
+Then Phase 7 (productionization / RLS).
 
 ## Locked decisions
 Claude=haiku-4-5 | MVP=single seeded tenant (auth UI deferred to P6) | sessions encrypted

@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models import MonitoredSource, User
+from app.models import MonitoredSource, Platform, User
 from app.schemas.admin import SourceCreate, SourceOut, SourceUpdate
+from app.services.facebook_group import facebook_group_id
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -20,6 +21,13 @@ _DUPLICATE = HTTPException(
     detail="A source with this platform and identifier already exists",
 )
 _NOT_FOUND = HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Source not found")
+_BAD_FACEBOOK_IDENTIFIER = HTTPException(
+    status_code=422,  # Unprocessable: matches Pydantic's own validation status
+    detail=(
+        "Facebook source must be a group URL or id, e.g. "
+        "https://facebook.com/groups/<id> or just <id>"
+    ),
+)
 
 
 async def _get_owned(db: AsyncSession, tenant_id: int, source_id: int) -> MonitoredSource:
@@ -82,7 +90,17 @@ async def update_source(
     db: AsyncSession = Depends(get_db),
 ) -> MonitoredSource:
     source = await _get_owned(db, current_user.tenant_id, source_id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    # Platform is immutable on update, so editing a Facebook source's identifier
+    # must satisfy the same group-reference rule as creation -- otherwise an
+    # operator could edit a working source into one that silently scrapes nothing.
+    if (
+        "identifier" in changes
+        and source.platform == Platform.FACEBOOK
+        and facebook_group_id(changes["identifier"]) is None
+    ):
+        raise _BAD_FACEBOOK_IDENTIFIER
+    for field, value in changes.items():
         setattr(source, field, value)
     try:
         await db.commit()

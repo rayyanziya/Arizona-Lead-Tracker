@@ -23,6 +23,7 @@ def _settings(**overrides):
         "anthropic_api_key": "",
         "reddit_client_id": "",
         "reddit_client_secret": "",
+        "x_bearer_token": "",
         "telegram_bot_token": "",
         "smtp_host": "mailpit",
     }
@@ -48,6 +49,14 @@ class TestReddit:
 
     def test_reddit_not_configured_with_only_id(self):
         assert not _status(reddit_client_id="id", reddit_client_secret="").reddit_configured
+
+
+class TestX:
+    def test_x_configured_when_bearer_token_present(self):
+        assert _status(x_bearer_token="AAAA-bearer").x_configured
+
+    def test_x_not_configured_when_blank(self):
+        assert not _status(x_bearer_token="  ").x_configured
 
 
 class TestFacebookAndChannels:

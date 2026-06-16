@@ -46,7 +46,8 @@ export default function ConfigBanner() {
 
   if (!status) return null;
 
-  const canCollect = status.reddit_configured || status.facebook_session_present;
+  const canCollect =
+    status.reddit_configured || status.x_configured || status.facebook_session_present;
   const blocked: string[] = [];
   if (!status.scoring_configured) {
     blocked.push("No Anthropic API key — scraped posts can't be scored, so no leads will appear. Set ANTHROPIC_API_KEY in .env and restart.");
@@ -61,6 +62,7 @@ export default function ConfigBanner() {
         <strong style={{ marginRight: 4 }}>System status</strong>
         <Chip ok={status.scoring_configured} label="Scoring (Anthropic)" />
         <Chip ok={status.reddit_configured} label="Reddit" />
+        <Chip ok={status.x_configured} label="X" />
         <Chip ok={status.facebook_session_present} label="Facebook session" />
         <Chip ok={status.telegram_configured} label="Telegram" />
         <Chip ok={status.email_configured} label="Email" />

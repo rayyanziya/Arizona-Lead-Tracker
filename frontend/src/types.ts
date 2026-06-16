@@ -70,6 +70,7 @@ export interface Source {
 export interface ConfigStatus {
   scoring_configured: boolean;
   reddit_configured: boolean;
+  x_configured: boolean;
   facebook_session_present: boolean;
   telegram_configured: boolean;
   email_configured: boolean;
