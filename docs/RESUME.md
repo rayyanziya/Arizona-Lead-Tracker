@@ -253,6 +253,31 @@ note is inverted in practice (API primary).
 
 Then Phase 7 (productionization / RLS).
 
+## Free / zero-budget scoring (DONE 2026-06-18, TDD)
+Project constraint: runs at $0 (no paid X API, no Claude credits). Made stage-2
+scoring degrade gracefully instead of failing when no Anthropic key is set.
+- services/heuristic_scoring.py -- PURE buyer/seller phrase classifier (EN + Bahasa
+  Indonesia) returning Score(is_buyer, confidence 1-10, reason). Conservative: a
+  seller cue cancels a lone buyer cue; 1 clear buyer cue -> conf 7 (clears default
+  threshold). Ships HeuristicClient, shaped to satisfy scoring.AnthropicLike
+  (messages.create -> a tool_use block parse_score accepts), so score_post + the
+  pipeline use it UNCHANGED -- zero churn to scoring.py/pipeline.py or the 295 tests.
+- tasks/jobs.py -- _anthropic() -> _score_client(): Claude when ANTHROPIC_API_KEY is
+  set, else HeuristicClient (logged). Only call site updated.
+- 8 new unit tests (tests/unit/test_heuristic_scoring.py), ruff clean. Full suite
+  302 passed; 1 PRE-EXISTING unrelated failure (api/test_status.py::
+  test_test_score_rejects_blank_body asserts 422 but gets 503 when no key in the
+  test env -- get_anthropic_client 503s before body validation; not caused here).
+- Notification config bug fixed: pipeline reads config["target"] but seed wrote
+  {"chat_id":""}/{"to":[...]} -> target always empty -> email 501, telegram fallback.
+  seed.py now writes {"target": ...}; live tenant-1 rows patched in Postgres.
+- .env ANTHROPIC_API_KEY blanked on purpose ($0); worker recreated -> live scorer
+  is HeuristicClient. To use Claude later: set a real key + recreate worker.
+- E2E verified free: synthetic buyer post -> NOTIFIED, score 9 -> email landed in
+  Mailpit (http://localhost:8025). Telegram still 404 (target empty; needs chat_id).
+- X (Twitter): token verified valid but recent-search returns HTTP 402 (no credits);
+  needs a PAID tier. X monitor stays code-complete + parked until/unless paid.
+
 ## Locked decisions
 Claude=haiku-4-5 | MVP=single seeded tenant (auth UI deferred to P6) | sessions encrypted
 at rest (Fernet) | X=scrape with official-API fallback noted | enums=(str,Enum)

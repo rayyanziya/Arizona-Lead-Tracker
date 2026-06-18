@@ -25,7 +25,9 @@ from app.models import Keyword as KeywordRow
 from app.models import MonitoredSource, Platform
 from app.schemas.raw_post import RawPost
 from app.services.facebook_group import facebook_group_id
+from app.services.heuristic_scoring import HeuristicClient
 from app.services.keyword_matcher import Keyword
+from app.services.scoring import AnthropicLike
 from app.tasks.celery_app import app
 from app.tasks.notify import build_senders, deliver
 from app.tasks.pipeline import process_post
@@ -64,8 +66,17 @@ def _redis() -> Redis:
     return Redis.from_url(settings.redis_url)
 
 
-def _anthropic() -> Anthropic:
-    return Anthropic(api_key=settings.anthropic_api_key)
+def _score_client() -> AnthropicLike:
+    """Use Claude when a key is configured; otherwise score for free, offline.
+
+    The heuristic client satisfies the same protocol, so the pipeline and
+    ``score_post`` are unchanged -- a missing/unfunded Anthropic key degrades the
+    quality of stage-2 scoring, never breaks the lead flow.
+    """
+    if settings.anthropic_api_key and settings.anthropic_api_key.strip():
+        return Anthropic(api_key=settings.anthropic_api_key)
+    logger.info("no ANTHROPIC_API_KEY set -- scoring with the free heuristic")
+    return HeuristicClient()
 
 
 def _senders():
@@ -106,7 +117,7 @@ def process_post_task(self, tenant_id: int, raw_payload: dict) -> str:
                 tenant_id,
                 raw,
                 keywords=keywords,
-                client=_anthropic(),
+                client=_score_client(),
                 dedup_cache=cache,
                 score_cache=cache,
                 enqueue=to_notify.append,

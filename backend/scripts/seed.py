@@ -90,8 +90,10 @@ def build_seed_plan() -> SeedPlan:
         ),
     ]
     notifications = [
-        NotificationSeed("telegram", True, 7, {"chat_id": ""}),
-        NotificationSeed("email", True, 7, {"to": ["leads@arizona-tracker.local"]}),
+        # The pipeline reads config["target"] uniformly (a chat id for telegram,
+        # a recipient address for email); the senders consume it as Notification.target.
+        NotificationSeed("telegram", True, 7, {"target": ""}),
+        NotificationSeed("email", True, 7, {"target": "leads@arizona-tracker.local"}),
     ]
     return SeedPlan(
         tenant_name="Arizona Lead Tracker",
