@@ -29,32 +29,49 @@ import sys
 # throwaway diagnostic, not a production selector.
 _PROBE_JS = r"""
 (maxNodes) => {
-  const articles = Array.from(
-    document.querySelectorAll('div[role="feed"] div[role="article"]')
-  ).slice(0, maxNodes);
-  return articles.map((art, index) => {
-    const hrefs = Array.from(art.querySelectorAll('a[href]'))
-      .map(a => a.getAttribute('href'))
-      .filter(Boolean)
-      .slice(0, 25);
-    const timeish = Array.from(art.querySelectorAll('abbr, time, a[role="link"]'))
-      .slice(0, 8)
-      .map(el => ({
-        tag: el.tagName.toLowerCase(),
-        utime: el.getAttribute('data-utime'),
-        datetime: el.getAttribute('datetime'),
-        aria: el.getAttribute('aria-label'),
-        text: (el.textContent || '').trim().slice(0, 40),
-      }));
-    return {
-      index,
+  const all = Array.from(document.querySelectorAll('div[role="feed"] div[role="article"]'));
+  // Top-level post = an article with no article ancestor (comments are nested articles).
+  const topLevel = all.filter(a => !a.parentElement.closest('div[role="article"]'));
+  const nonEmpty = topLevel.filter(a => (a.innerText || '').trim().length > 20);
+  const postLink = (art) => {
+    for (const a of art.querySelectorAll('a[href]')) {
+      const href = a.getAttribute('href') || '';
+      if (/\/(posts|permalink)\/\d+/.test(href) && !href.includes('comment_id')) return a.href;
+    }
+    return null;
+  };
+  const hasCommentLink = (art) => Array.from(art.querySelectorAll('a[href]'))
+    .some(a => (a.getAttribute('href') || '').includes('comment_id'));
+  const authorName = (art) => {
+    // First visible (non aria-hidden) link to a user/profile with real text.
+    for (const a of art.querySelectorAll('a[href*="/user/"], h2 a, h3 a, strong a')) {
+      if (a.getAttribute('aria-hidden') === 'true') continue;
+      const t = (a.textContent || '').trim();
+      if (t) return t;
+    }
+    return null;
+  };
+  const message = (art) => {
+    const m = art.querySelector('div[data-ad-preview="message"]');
+    if (m) return (m.innerText || '').trim();
+    let best = '';
+    for (const d of art.querySelectorAll('div[dir="auto"]')) {
+      const t = (d.innerText || '').trim();
+      if (t.length > best.length) best = t;
+    }
+    return best;
+  };
+  return {
+    counts: { all: all.length, topLevel: topLevel.length, nonEmptyTopLevel: nonEmpty.length },
+    posts: nonEmpty.slice(0, maxNodes).map(art => ({
       aria_label: art.getAttribute('aria-label'),
-      hrefs,
-      text_preview: (art.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 240),
-      timeish,
-      html: (art.outerHTML || '').slice(0, 1500),
-    };
-  });
+      post_link: postLink(art),
+      has_comment_link: hasCommentLink(art),
+      author: authorName(art),
+      message: message(art).slice(0, 160),
+      text_preview: (art.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    })),
+  };
 }
 """
 
@@ -90,22 +107,19 @@ def main(argv: list[str] | None = None) -> int:
         for _ in range(max(1, args.scrolls)):
             driver.scroll()
 
-        nodes = driver._page.evaluate(_PROBE_JS, args.max)  # noqa: SLF001 - diagnostic only
+        result = driver._page.evaluate(_PROBE_JS, args.max)  # noqa: SLF001 - diagnostic only
         print(f"page url: {driver._page.url}")  # noqa: SLF001
-        print(f"dumped {len(nodes)} article node(s)")
-        for node in nodes:
+        print(f"counts: {json.dumps(result['counts'])}")
+        posts = result["posts"]
+        print(f"dumped {len(posts)} top-level post node(s)")
+        for i, node in enumerate(posts):
             print("=" * 70)
-            print(f"[article {node['index']}] aria_label={node['aria_label']!r}")
-            print(f"  text_preview: {node['text_preview']!r}")
-            print("  hrefs:")
-            for href in node["hrefs"]:
-                print(f"    - {href}")
-            print("  timeish:")
-            for t in node["timeish"]:
-                print(f"    - {json.dumps(t)}")
-            if args.html:
-                print("  html (trimmed):")
-                print("    " + node["html"].replace("\n", " "))
+            print(f"[post {i}] aria_label={node['aria_label']!r}")
+            print(f"  post_link : {node['post_link']}")
+            print(f"  comment_link_present: {node['has_comment_link']}")
+            print(f"  author    : {node['author']!r}")
+            print(f"  message   : {node['message']!r}")
+            print(f"  text_prev : {node['text_preview']!r}")
         return 0
     finally:
         driver.close()

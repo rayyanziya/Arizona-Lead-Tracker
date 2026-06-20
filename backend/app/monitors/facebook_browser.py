@@ -32,24 +32,53 @@ _EXTRACT_JS = r"""
   const out = [];
   const articles = document.querySelectorAll('div[role="feed"] div[role="article"]');
   for (const art of articles) {
-    let permalink = null;
-    const links = art.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"]');
-    for (const a of links) {
+    // Skip skeleton/placeholder cards that have not hydrated yet.
+    if ((art.innerText || '').trim().length < 1) continue;
+
+    // Permalink -> post id. Prefer the post's OWN link (no comment_id); fall back to a
+    // comment-story link so a "X commented on a post" card still resolves to its parent
+    // post. The parser strips the ?comment_id query, leaving a clean post URL either way.
+    let permalink = null, commentFallback = null;
+    for (const a of art.querySelectorAll('a[href]')) {
       const href = a.getAttribute('href') || '';
-      if (/\/(posts|permalink)\/\d+/.test(href)) { permalink = a.href; break; }
+      if (!/\/(posts|permalink)\/\d+/.test(href)) continue;
+      if (href.includes('comment_id')) { if (!commentFallback) commentFallback = a.href; }
+      else { permalink = a.href; break; }
     }
-    let author = art.getAttribute('aria-label');
-    if (!author) {
-      const al = art.querySelector('h3 a, h4 a, strong a');
-      if (al) author = al.textContent;
+    if (!permalink) permalink = commentFallback;
+    if (!permalink) continue;  // no stable post id -> let read_posts drop it
+
+    // Author = first VISIBLE profile link with real text. The avatar link to the same
+    // profile is aria-hidden, so skip it; this yields a clean name ("Jane Doe") rather
+    // than the "Comment by Jane Doe 3 days ago" aria-label we used to grab.
+    let author = null;
+    for (const a of art.querySelectorAll('a[href*="/user/"], h2 a, h3 a, strong a')) {
+      if (a.getAttribute('aria-hidden') === 'true') continue;
+      const t = (a.textContent || '').trim();
+      if (t) { author = t; break; }
     }
+
+    // Message text: the dedicated post-body container if present, else the longest
+    // dir=auto block (avoids grabbing a one-word UI label over the real content).
     let text = null;
-    const msg = art.querySelector('div[data-ad-preview="message"], div[dir="auto"]');
-    if (msg) text = msg.innerText;
-    if (!text) text = art.innerText;
+    const msg = art.querySelector('div[data-ad-preview="message"]');
+    if (msg) {
+      text = msg.innerText;
+    } else {
+      let best = '';
+      for (const d of art.querySelectorAll('div[dir="auto"]')) {
+        const t = (d.innerText || '').trim();
+        if (t.length > best.length) best = t;
+      }
+      text = best || null;
+    }
+
+    // Timestamp: keep the legacy data-utime path for any surface that still emits it;
+    // modern group feeds render only relative text ("1d"), which has no epoch -> null.
     let timestamp = null;
     const t = art.querySelector('abbr[data-utime]');
     if (t && t.getAttribute('data-utime')) timestamp = Number(t.getAttribute('data-utime'));
+
     out.push({ permalink, author, text, timestamp });
   }
   return out;
