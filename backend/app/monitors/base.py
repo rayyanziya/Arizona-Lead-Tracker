@@ -26,7 +26,7 @@ from typing import ClassVar
 
 from sqlalchemy.orm import Session
 
-from app.models import Platform, ScrapeRun, ScrapeStatus
+from app.models import MonitoredSource, Platform, ScrapeRun, ScrapeStatus
 from app.schemas.raw_post import RawPost
 
 
@@ -118,8 +118,16 @@ def run_monitor(
         run.status = ScrapeStatus.ERROR
         run.error = str(exc)
     finally:
+        finished = now()
         run.posts_collected = collected
-        run.finished_at = now()
+        run.finished_at = finished
+        # Stamp the source so the dashboard's "Last scrape" reflects every run,
+        # not just successful ones -- a blocked/errored attempt still happened and
+        # the operator needs to see it was checked. All three platforms flow
+        # through here, so this is the one place that keeps the column truthful.
+        source = session.get(MonitoredSource, monitor.source_id)
+        if source is not None:
+            source.last_scraped_at = finished
         session.flush()
 
     return run
