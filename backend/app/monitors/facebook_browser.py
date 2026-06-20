@@ -100,6 +100,26 @@ _STEALTH_UA = (
 _STEALTH_INIT_JS = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
 
 
+def _normalize_group_url(value: str) -> str:
+    """Turn a stored source identifier into a navigable group URL.
+
+    Sources store whatever the user entered -- a bare id ("373842053109852"), a
+    slug, a relative "groups/<id>" path, or a full URL. Playwright's goto needs an
+    absolute URL, so a bare id was failing with "Cannot navigate to invalid URL".
+    Full URLs pass through untouched; everything else is resolved to its group id
+    (via the same parser the API/scraper use) and rebuilt as a canonical group URL.
+    """
+    raw = (value or "").strip()
+    if raw.startswith(("http://", "https://")):
+        return raw
+    from app.services.facebook_group import facebook_group_id
+
+    group_id = facebook_group_id(raw)
+    if group_id:
+        return f"https://www.facebook.com/groups/{group_id}/"
+    return raw  # last resort -- let goto surface a clear error rather than guess
+
+
 class PlaywrightFeedDriver:
     """Drive a logged-in Chromium over one Facebook group feed.
 
@@ -120,7 +140,7 @@ class PlaywrightFeedDriver:
         proxy: dict | None = None,
         load=load_session,
     ) -> None:
-        self._group_url = group_url
+        self._group_url = _normalize_group_url(group_url)
         self._session_dir = session_dir
         self._account = account
         self._headless = headless
