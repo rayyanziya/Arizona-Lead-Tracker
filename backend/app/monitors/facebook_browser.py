@@ -58,6 +58,18 @@ _EXTRACT_JS = r"""
 
 _LOGIN_HINTS = ("login", "checkpoint", "/login/")
 
+# Anti-automation hardening. Facebook serves a skeleton-only feed (posts never hydrate)
+# to browsers that announce themselves as automated. The two tells it keys on are the
+# "HeadlessChrome" user-agent and navigator.webdriver === true; we neutralise both. The
+# UA just drops "Headless" from the real one so it stays consistent with the Linux
+# platform the container actually runs on. Verified against the live feed -- without
+# this, role=article nodes render as empty placeholders.
+_STEALTH_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+)
+_STEALTH_INIT_JS = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+
 
 class PlaywrightFeedDriver:
     """Drive a logged-in Chromium over one Facebook group feed.
@@ -100,19 +112,47 @@ class PlaywrightFeedDriver:
 
         state_json = self._load(session_path(self._session_dir, self._account))
         self._pw = sync_playwright().start()
-        launch_kwargs: dict = {"headless": self._headless}
+        launch_kwargs: dict = {
+            "headless": self._headless,
+            # Stops Chromium from exposing the AutomationControlled blink feature.
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
         if self._proxy:
             launch_kwargs["proxy"] = self._proxy
         self._browser = self._pw.chromium.launch(**launch_kwargs)
-        ctx_kwargs: dict = {"storage_state": json.loads(state_json)}
+        ctx_kwargs: dict = {
+            "storage_state": json.loads(state_json),
+            "user_agent": _STEALTH_UA,  # drop the "HeadlessChrome" tell
+        }
         if self._locale:
             ctx_kwargs["locale"] = self._locale
         if self._timezone:
             ctx_kwargs["timezone_id"] = self._timezone
         self._context = self._browser.new_context(**ctx_kwargs)
+        # Must run before any navigation so navigator.webdriver is masked on first paint.
+        self._context.add_init_script(_STEALTH_INIT_JS)
         self._page = self._context.new_page()
         self._page.goto(self._group_url, wait_until="domcontentloaded")
         self._started = True
+        self._settle_feed()
+
+    def _settle_feed(self) -> None:
+        """Wait for the async feed to stream in real posts, not just skeleton cards.
+
+        Facebook renders empty ``div[role="article"]`` placeholders immediately, then
+        hydrates them over several seconds via background fetches. Extracting too early
+        yields zero posts. We wait (bounded) until at least one article has real text,
+        falling back to a fixed pause so a quiet group never hangs the run.
+        """
+        try:
+            self._page.wait_for_function(
+                "() => Array.from(document.querySelectorAll("
+                "'div[role=\"feed\"] div[role=\"article\"]'))"
+                ".some(a => (a.innerText || '').trim().length > 20)",
+                timeout=20000,
+            )
+        except Exception:  # noqa: BLE001 - quiet/empty group or slow feed; fall through
+            self._page.wait_for_timeout(4000)
 
     def read_posts(self) -> list[ScrapedPost]:
         self._ensure_started()
@@ -136,7 +176,9 @@ class PlaywrightFeedDriver:
     def scroll(self) -> None:
         self._ensure_started()
         self._page.mouse.wheel(0, 3000)
-        self._page.wait_for_timeout(800)  # let lazy-loaded posts attach
+        # FB streams newly-revealed posts in over a couple of seconds; 800ms was too
+        # short and left freshly-attached articles as empty skeletons at extract time.
+        self._page.wait_for_timeout(2500)
 
     def is_blocked(self) -> bool:
         self._ensure_started()
