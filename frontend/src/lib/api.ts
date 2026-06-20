@@ -111,6 +111,9 @@ export const api = {
     request<Keyword>(`/keywords/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteKeyword: (id: number) => request<void>(`/keywords/${id}`, { method: "DELETE" }),
 
+  scrapeFacebook: () =>
+    request<{ dispatched: number }>("/sources/scrape", { method: "POST" }),
+
   listSources: () => request<Source[]>("/sources"),
   createSource: (body: Record<string, unknown>) =>
     request<Source>("/sources", { method: "POST", body: JSON.stringify(body) }),

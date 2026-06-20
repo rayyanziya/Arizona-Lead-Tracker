@@ -27,6 +27,8 @@ export default function Leads() {
   const [minScore, setMinScore] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,6 +66,25 @@ export default function Leads() {
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? updated : l)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update lead");
+    }
+  }
+
+  async function scrapeFacebook() {
+    setScraping(true);
+    setScrapeMsg(null);
+    setError(null);
+    try {
+      const { dispatched } = await api.scrapeFacebook();
+      setScrapeMsg(
+        dispatched === 0
+          ? "No active Facebook sources to scrape — add one under Sources."
+          : `Scraping ${dispatched} Facebook group${dispatched === 1 ? "" : "s"}… ` +
+              "new leads appear here in a minute or two — hit Refresh.",
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to start scrape");
+    } finally {
+      setScraping(false);
     }
   }
 
@@ -111,11 +132,17 @@ export default function Leads() {
             {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
+        <div className="field">
+          <button onClick={scrapeFacebook} disabled={scraping}>
+            {scraping ? "Starting…" : "Scrape Facebook"}
+          </button>
+        </div>
         <div className="field muted" style={{ marginLeft: "auto" }}>
           {total} lead{total === 1 ? "" : "s"}
         </div>
       </div>
 
+      {scrapeMsg && <div className="notice">{scrapeMsg}</div>}
       {error && <div className="error">{error}</div>}
 
       <div className="card" style={{ padding: 0 }}>

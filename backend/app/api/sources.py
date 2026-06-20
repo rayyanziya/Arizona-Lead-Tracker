@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import MonitoredSource, Platform, User
@@ -120,3 +122,47 @@ async def delete_source(
     source = await _get_owned(db, current_user.tenant_id, source_id)
     await db.delete(source)
     await db.commit()
+
+
+class ScrapeOut(BaseModel):
+    """How many Facebook scrapes the manual trigger enqueued."""
+
+    dispatched: int
+
+
+@router.post("/scrape", response_model=ScrapeOut)
+async def scrape_now(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ScrapeOut:
+    """Enqueue an immediate scrape of this tenant's active Facebook sources.
+
+    The dashboard "Scrape Facebook" button hits this so an operator gets results
+    now instead of waiting for the next 20-minute beat cycle. We only push to the
+    Redis broker (non-blocking) and return how many scrapes were enqueued; the
+    browser worker runs them one at a time and posts flow through the normal
+    pipeline. A scrape per source is idempotent (dedup happens downstream), so a
+    double-click just re-checks the same feeds.
+    """
+    rows = (
+        (
+            await db.execute(
+                select(MonitoredSource.id).where(
+                    MonitoredSource.tenant_id == current_user.tenant_id,
+                    MonitoredSource.platform == Platform.FACEBOOK,
+                    MonitoredSource.is_active.is_(True),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # Imported here so the API process never pulls in the Celery task module at
+    # startup (keeps the request path light and avoids a circular import).
+    from app.tasks.celery_app import app as celery_app
+
+    for source_id in rows:
+        celery_app.send_task(
+            "app.tasks.jobs.scrape_browser_source", args=[source_id], queue="browser"
+        )
+    return ScrapeOut(dispatched=len(rows))

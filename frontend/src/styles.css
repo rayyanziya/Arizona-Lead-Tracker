@@ -289,6 +289,17 @@ tr:last-child td { border-bottom: none; }
   font-size: 13px;
 }
 
+.notice {
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  padding: 10px 14px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
 .empty {
   color: var(--muted);
   text-align: center;
