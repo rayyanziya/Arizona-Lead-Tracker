@@ -49,9 +49,6 @@ export default function ConfigBanner() {
   const canCollect =
     status.reddit_configured || status.x_configured || status.facebook_session_present;
   const blocked: string[] = [];
-  if (!status.scoring_configured) {
-    blocked.push("No Anthropic API key — scraped posts can't be scored, so no leads will appear. Set ANTHROPIC_API_KEY in .env and restart.");
-  }
   if (!canCollect) {
     blocked.push("No collector configured — add Reddit API credentials (reliable) or capture a Facebook session to start collecting posts.");
   }
@@ -79,6 +76,13 @@ export default function ConfigBanner() {
       {blocked.length === 0 && (
         <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
           Ready to collect and score. New posts appear here within ~20 minutes of the next scrape.
+        </div>
+      )}
+      {!status.scoring_configured && (
+        <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          No Anthropic key set, so posts are scored by the free built-in scorer.
+          Leads still appear normally. Add ANTHROPIC_API_KEY only if you want
+          higher-quality Claude scoring.
         </div>
       )}
 
