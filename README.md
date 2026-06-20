@@ -7,10 +7,6 @@ a real buyer, and shows you the best leads in a simple dashboard. It can also pi
 you on Telegram and email the moment a hot lead shows up, so you can be the first
 to reply.
 
-> Note on the name: the project is called "Arizona" but it is built for the
-> Indonesian market (Indonesian Facebook groups, Jakarta timezone). The name is
-> just a label.
-
 > Please read before using: Facebook and X do not allow automated scraping in
 > their rules, so accounts or IP addresses can get banned. The posts you collect
 > contain people's personal data, which is protected by law (Indonesia's PDP Law
