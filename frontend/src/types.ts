@@ -82,3 +82,11 @@ export interface TestScoreResult {
   reason: string;
   model: string;
 }
+
+export interface ScrapeHealth {
+  blocked: boolean;
+  platform: string | null;
+  consecutive_blocked: number;
+  last_blocked_at: string | null;
+  last_success_at: string | null;
+}

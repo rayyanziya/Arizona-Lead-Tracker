@@ -7,6 +7,7 @@ import type {
   Keyword,
   Lead,
   LeadList,
+  ScrapeHealth,
   Source,
   TestScoreResult,
   User,
@@ -87,6 +88,7 @@ export const api = {
     }),
   me: () => request<User>("/auth/me"),
   status: () => request<ConfigStatus>("/status"),
+  scrapeHealth: () => request<ScrapeHealth>("/status/scrape-health"),
   testScore: (body: { title?: string; body: string }) =>
     request<TestScoreResult>("/status/test-score", {
       method: "POST",

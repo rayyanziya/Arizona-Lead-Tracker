@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import type { ConfigStatus, TestScoreResult } from "../types";
+import type { ConfigStatus, ScrapeHealth, TestScoreResult } from "../types";
+
+function fmtWhen(iso: string | null): string {
+  if (!iso) return "never";
+  return new Date(iso).toLocaleString();
+}
 
 // A canned buyer-intent post so the operator can one-click a real scoring call
 // without thinking up sample text.
@@ -23,12 +28,19 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
 
 export default function ConfigBanner() {
   const [status, setStatus] = useState<ConfigStatus | null>(null);
+  const [health, setHealth] = useState<ScrapeHealth | null>(null);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestScoreResult | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
     api.status().then(setStatus).catch(() => setStatus(null));
+    // Poll scrape health so a fresh block surfaces without a manual refresh.
+    // The check is cheap (one indexed query) and a wall can appear mid-session.
+    const pull = () => api.scrapeHealth().then(setHealth).catch(() => setHealth(null));
+    pull();
+    const t = setInterval(pull, 60_000);
+    return () => clearInterval(t);
   }, []);
 
   async function runScoringTest() {
@@ -64,6 +76,25 @@ export default function ConfigBanner() {
         <Chip ok={status.telegram_configured} label="Telegram" />
         <Chip ok={status.email_configured} label="Email" />
       </div>
+      {health?.blocked && (
+        <div className="error" style={{ marginTop: 10, borderLeftWidth: 3 }}>
+          <strong>
+            {health.platform === "facebook"
+              ? "Facebook"
+              : health.platform ?? "A collector"}{" "}
+            is blocking the scraper
+            {health.consecutive_blocked > 1
+              ? ` (${health.consecutive_blocked} attempts in a row)`
+              : ""}
+            .
+          </strong>{" "}
+          No new posts are being collected, so no new leads will appear. Your saved
+          login likely hit a checkpoint. Re-capture it by running{" "}
+          <code>make capture-fb</code> in the project folder and clearing any
+          checkpoint Facebook shows you. Last successful collection:{" "}
+          {fmtWhen(health.last_success_at)}.
+        </div>
+      )}
       {blocked.length > 0 && (
         <div style={{ marginTop: 10 }}>
           {blocked.map((msg) => (

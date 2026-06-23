@@ -7,12 +7,17 @@ credentials, or no captured Facebook session. Auth-gated like the rest of the AP
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.models import User
+from app.core.database import get_db
+from app.models import ScrapeRun, ScrapeStatus, User
 from app.monitors.fb_session import session_path
 from app.services.config_status import config_status
 from app.services.scoring import AnthropicLike, score_post
@@ -36,6 +41,82 @@ async def get_status(current_user: User = Depends(get_current_user)) -> ConfigSt
     present = session_path(settings.browser_session_dir).exists()
     return ConfigStatusOut.model_validate(
         config_status(settings, facebook_session_present=present)
+    )
+
+
+class ScrapeHealthOut(BaseModel):
+    """Whether collection is currently being walled by the platform."""
+
+    blocked: bool  # the newest finished run was BLOCKED -> nothing is collecting
+    platform: str | None  # which platform is walled (e.g. "facebook"), if any
+    consecutive_blocked: int  # unbroken BLOCKED streak from the newest run back
+    last_blocked_at: datetime | None
+    last_success_at: datetime | None
+
+
+# How many recent runs to inspect. Sources cycle every ~20 min, so 30 runs is
+# several hours of history -- plenty to see a streak without scanning the table.
+_HEALTH_WINDOW = 30
+
+
+@router.get("/scrape-health", response_model=ScrapeHealthOut)
+async def get_scrape_health(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ScrapeHealthOut:
+    """Report whether the collector is being blocked right now.
+
+    Walks the most recent *finished* scrape runs (newest first) and counts the
+    unbroken run of BLOCKED outcomes at the top. A nonzero streak means the
+    platform is walling us this very cycle -- a stale Facebook session or a
+    checkpoint -- so the dashboard can tell the operator to re-capture instead of
+    silently collecting nothing. RUNNING rows are skipped: an in-flight scrape is
+    not yet an outcome.
+    """
+    rows = (
+        await db.execute(
+            select(ScrapeRun.platform, ScrapeRun.status, ScrapeRun.started_at)
+            .where(
+                ScrapeRun.tenant_id == current_user.tenant_id,
+                ScrapeRun.status != ScrapeStatus.RUNNING,
+            )
+            .order_by(ScrapeRun.started_at.desc())
+            .limit(_HEALTH_WINDOW)
+        )
+    ).all()
+
+    # The last success can predate the whole window (e.g. a long blocked streak),
+    # so look it up directly rather than scanning `rows` -- otherwise a fully
+    # blocked window would wrongly report "never collected".
+    last_success_at = (
+        await db.execute(
+            select(ScrapeRun.started_at)
+            .where(
+                ScrapeRun.tenant_id == current_user.tenant_id,
+                ScrapeRun.status == ScrapeStatus.SUCCESS,
+            )
+            .order_by(ScrapeRun.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    last_blocked_at = next(
+        (r.started_at for r in rows if r.status == ScrapeStatus.BLOCKED), None
+    )
+
+    consecutive = 0
+    platform = None
+    for r in rows:
+        if r.status != ScrapeStatus.BLOCKED:
+            break
+        consecutive += 1
+        platform = r.platform
+
+    return ScrapeHealthOut(
+        blocked=consecutive > 0,
+        platform=platform.value if platform is not None else None,
+        consecutive_blocked=consecutive,
+        last_blocked_at=last_blocked_at,
+        last_success_at=last_success_at,
     )
 
 
